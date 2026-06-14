@@ -8,7 +8,7 @@ import platform
 import subprocess
 import shutil
 import os
-
+import pyautogui
 
 def initialize_speech_engine():
     engine = pyttsx3.init()
@@ -101,6 +101,36 @@ def open_text_editor(path: str | None = None, preferred: str | None = None) -> b
         print(f"Failed to open editor: {e}")
         return False
 
+def close_text_editor(preferred: str | None = None) -> bool:
+    """Close an editor/application cross-platform.
+
+    On macOS, sends an AppleScript command to quit Notes or TextEdit.
+    On Windows, uses taskkill to stop Notepad. On Linux, attempts pkill.
+    """
+    system = platform.system()
+    try:
+        if system == "Darwin":
+            if preferred and str(preferred).lower() == "notes":
+                subprocess.Popen(["osascript", "-e", 'tell application "Notes" to quit'])
+            else:
+                subprocess.Popen(["osascript", "-e", 'tell application "TextEdit" to quit'])
+        elif system == "Windows":
+            # best-effort to quit Notepad
+            if preferred and str(preferred).lower() in ("notes", "notepad"):
+                subprocess.Popen(["taskkill", "/IM", "notepad.exe", "/F"])
+            else:
+                subprocess.Popen(["taskkill", "/F", "/IM", "notepad.exe"])
+        else:
+            # Linux/other: try to kill common GUI editors
+            if preferred and str(preferred).lower() in ("notes", "gedit"):
+                subprocess.Popen(["pkill", "-f", "gedit"])
+            else:
+                subprocess.Popen(["pkill", "-f", "gedit"])
+        return True
+    except Exception as e:
+        print(f"Failed to close editor: {e}")
+        return False
+
 
 def listen_for_command():
     r = sr.Recognizer()
@@ -165,11 +195,11 @@ def wish_me():
     day = cal_day()
 
     if 0 <= hour < 12:
-        speak_text(f"Good morning Codefather. It's {day}, and the time is {current_time}.")
+        speak_text(f"Good morning, Codefather. Today is {day}, and it's {current_time}.")
     elif 12 <= hour < 16:
-        speak_text(f"Good afternoon Codefather. It's {day}, and the time is {current_time}.")
+        speak_text(f"Good afternoon, Codefather. Today is {day}, and it's {current_time}.")
     else:
-        speak_text(f"Good evening Codefather. It's {day}, and the time is {current_time}.")
+        speak_text(f"Good evening, Codefather. Today is {day}, and it's {current_time}.")
 
 
 def show_available_voices():
@@ -207,6 +237,21 @@ def social_media(command):
     else:
         speak_text("Sorry Codefather, I cannot access that social media platform at the moment.")
 
+def schedule():
+    day = cal_day().lower()
+    speak_text("Codefather, today's schedule is ")
+    week={
+        "monday": "You have a meeting at 10 AM and a project deadline at 3 PM.",
+        "tuesday": "You have a team lunch at 12 PM and a client call at 4 PM.",
+        "wednesday": "You have a workshop at 2 PM and a code review at 5 PM.",
+        "thursday": "You have a presentation at 11 AM and a team meeting at 3 PM.",
+        "friday": "You have a brainstorming session at 1 PM and a project update at 4 PM.",
+        "saturday": "You have a personal development session at 10 AM and a team outing at 2 PM.",
+        "sunday": "You have a family gathering at 1 PM and a relaxation time at 5 PM.",
+    }
+    if day in week.keys():
+        speak_text(week[day])
+
 if __name__ == "__main__":
     # Uncomment this line if you want to see all available voices on your computer
     # show_available_voices()
@@ -233,7 +278,39 @@ if __name__ == "__main__":
 
         print(f"User Command: {user_command}")
 
-        # handle quick built-in actions
+        # handle quick built-in actions: close requests first
+        if any(kw in user_command for kw in ("close whatsapp", "quit whatsapp", "close whats app", "quit whats app")):
+            speak_text("Closing WhatsApp")
+            try:
+                subprocess.run(['osascript', '-e', 'tell application "WhatsApp" to quit'])
+                print("WhatsApp closed.")
+            except Exception as e:
+                print(f"Failed to close WhatsApp: {e}")
+            continue
+
+        if any(kw in user_command for kw in ("close notes", "close note", "quit notes", "quit note", "close editor", "close notepad")):
+            if "note" in user_command or "notes" in user_command:
+                speak_text("Closing Notes")
+                closed = close_text_editor(preferred="notes")
+            else:
+                speak_text("Closing editor")
+                closed = close_text_editor()
+            if closed:
+                print("Editor closed.")
+            else:
+                print("Failed to close editor.")
+            continue
+
+        # open requests
+        if any(kw in user_command for kw in ("open whatsapp", "open whats app", "launch whatsapp", "launch whats app")):
+            speak_text("Opening WhatsApp")
+            try:
+                subprocess.run(['open', '-a', 'WhatsApp'])
+                print("WhatsApp opened.")
+            except Exception as e:
+                print(f"Failed to open WhatsApp: {e}")
+            continue
+
         if any(kw in user_command for kw in ("open notepad", "open textedit", "open text edit", "open editor", "open code editor", "open notes", "open note")):
             if "note" in user_command or "notes" in user_command or "notepad" in user_command:
                 speak_text("Opening Notes")
@@ -246,16 +323,34 @@ if __name__ == "__main__":
             else:
                 print("Failed to open editor.")
             continue
+
         # Example response
         if "hello" in user_command:
             speak_text("Hello Codefather. How can I help you?")
-        if "who created you" in user_command:
+        elif "who created you" in user_command:
             speak_text("Codefather is a software developer and the creator of Sage, your personal assistant.")
-        if "what time is it" in user_command:
+        elif "what time is it" in user_command:
             current_time = time.strftime("%I:%M %p")
             speak_text(f"The current time is {current_time}.")
-        if "what are you" in user_command:
+        elif "what are you" in user_command:
             speak_text("I am Sage, an interactive artificial consciousness.")
+        elif "schedule" in user_command:
+            schedule()
+        elif 'volume up' in user_command or 'increase volume' in user_command:
+            speak_text("Increasing volume.")
+            try:
+                # On macOS, use AppleScript to increase volume
+                subprocess.run(['osascript', '-e', 'set volume output volume (output volume of (get volume settings) + 10)'])
+            except Exception as e:
+                print(f"Failed to increase volume: {e}")
+        elif 'volume down' in user_command or 'decrease volume' in user_command:
+            speak_text("Decreasing volume.")
+            try:
+                # On macOS, use AppleScript to decrease volume
+                subprocess.run(['osascript', '-e', 'set volume output volume (output volume of (get volume settings) - 10)'])
+            except Exception as e:
+                print(f"Failed to decrease volume: {e}")
+
         else:
             speak_text("I heard you, but I do not have a command for that yet.")
 
