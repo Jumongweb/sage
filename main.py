@@ -9,6 +9,9 @@ import subprocess
 import shutil
 import os
 import pyautogui
+import pvporcupine
+import pyaudio
+import struct
 
 def initialize_speech_engine():
     engine = pyttsx3.init()
@@ -216,15 +219,15 @@ def show_available_voices():
 
 def social_media(command):
     if "facebook" in command:
-        speak_text("Opening Facebook.")
+        speak_text("Sure, opening Facebook for you.")
         webbrowser.open("https://www.facebook.com")
         # Add code to open Facebook
     elif "instagram" in command:
-        speak_text("Opening Instagram.")
+        speak_text("Opening Instagram now.")
         webbrowser.open("https://www.instagram.com")
         # Add code to open Instagram
     elif "twitter" in command:
-        speak_text("Opening Twitter.")
+        speak_text("Let me open Twitter for you.")
         webbrowser.open("https://www.twitter.com")
         # Add code to open Twitter
     elif "linkedin" in command:
@@ -235,11 +238,11 @@ def social_media(command):
         webbrowser.open("https://www.github.com")
         
     else:
-        speak_text("Sorry Codefather, I cannot access that social media platform at the moment.")
+        speak_text("Sorry, I can't access that platform right now.")
 
 def schedule():
     day = cal_day().lower()
-    speak_text("Codefather, today's schedule is ")
+    speak_text("Let me check today's schedule for you.")
     week={
         "monday": "You have a meeting at 10 AM and a project deadline at 3 PM.",
         "tuesday": "You have a team lunch at 12 PM and a client call at 4 PM.",
@@ -247,10 +250,58 @@ def schedule():
         "thursday": "You have a presentation at 11 AM and a team meeting at 3 PM.",
         "friday": "You have a brainstorming session at 1 PM and a project update at 4 PM.",
         "saturday": "You have a personal development session at 10 AM and a team outing at 2 PM.",
-        "sunday": "You have a family gathering at 1 PM and a relaxation time at 5 PM.",
+        "sunday": "You have a family gathering at 1 PM and some relaxation time at 5 PM.",
     }
     if day in week.keys():
         speak_text(week[day])
+
+def wait_for_wake_word():
+    """
+    Listen for the wake word 'Hey Sage' using Porcupine.
+    Returns True when wake word is detected.
+    """
+    porcupine = None
+    pa = None
+    audio_stream = None
+    
+    try:
+        # Initialize Porcupine with the built-in 'hey siri' wake word (closest to "Hey Sage")
+        # Note: For custom "Hey Sage" wake word, you'll need to train it at console.picovoice.ai
+        porcupine = pvporcupine.create(keywords=['hey siri'])  # Using built-in, change to custom .ppn for "Hey Sage"
+        
+        pa = pyaudio.PyAudio()
+        
+        audio_stream = pa.open(
+            rate=porcupine.sample_rate,
+            channels=1,
+            format=pyaudio.paInt16,
+            input=True,
+            frames_per_buffer=porcupine.frame_length
+        )
+        
+        print("Listening for wake word 'Hey Sage'...")
+        
+        while True:
+            pcm = audio_stream.read(porcupine.frame_length)
+            pcm = struct.unpack_from("h" * porcupine.frame_length, pcm)
+            
+            keyword_index = porcupine.process(pcm)
+            
+            if keyword_index >= 0:
+                print("Wake word detected!")
+                return True
+                
+    except Exception as e:
+        print(f"Error in wake word detection: {e}")
+        return False
+    
+    finally:
+        if audio_stream is not None:
+            audio_stream.close()
+        if pa is not None:
+            pa.terminate()
+        if porcupine is not None:
+            porcupine.delete()
 
 if __name__ == "__main__":
     # Uncomment this line if you want to see all available voices on your computer
@@ -259,6 +310,15 @@ if __name__ == "__main__":
     wish_me()
 
     while True:
+        # Wait for wake word before listening to commands
+        wake_word_detected = wait_for_wake_word()
+        
+        if not wake_word_detected:
+            continue
+        
+        # Acknowledge wake word detection
+        speak_text("Yes, Codefather?")
+        
         result = listen_for_command()
 
         if not result:
@@ -273,14 +333,14 @@ if __name__ == "__main__":
             # continue
 
         if "exit" in user_command or "quit" in user_command or "stop" in user_command:
-            speak_text("Goodbye Codefather.")
+            speak_text("Goodbye, Codefather. Have a great day!")
             break
 
         print(f"User Command: {user_command}")
 
         # handle quick built-in actions: close requests first
         if any(kw in user_command for kw in ("close whatsapp", "quit whatsapp", "close whats app", "quit whats app")):
-            speak_text("Closing WhatsApp")
+            speak_text("Closing WhatsApp now.")
             try:
                 subprocess.run(['osascript', '-e', 'tell application "WhatsApp" to quit'])
                 print("WhatsApp closed.")
@@ -290,10 +350,10 @@ if __name__ == "__main__":
 
         if any(kw in user_command for kw in ("close notes", "close note", "quit notes", "quit note", "close editor", "close notepad")):
             if "note" in user_command or "notes" in user_command:
-                speak_text("Closing Notes")
+                speak_text("Closing Notes.")
                 closed = close_text_editor(preferred="notes")
             else:
-                speak_text("Closing editor")
+                speak_text("Closing the editor.")
                 closed = close_text_editor()
             if closed:
                 print("Editor closed.")
@@ -303,7 +363,7 @@ if __name__ == "__main__":
 
         # open requests
         if any(kw in user_command for kw in ("open whatsapp", "open whats app", "launch whatsapp", "launch whats app")):
-            speak_text("Opening WhatsApp")
+            speak_text("Opening WhatsApp for you.")
             try:
                 subprocess.run(['open', '-a', 'WhatsApp'])
                 print("WhatsApp opened.")
@@ -313,10 +373,10 @@ if __name__ == "__main__":
 
         if any(kw in user_command for kw in ("open notepad", "open textedit", "open text edit", "open editor", "open code editor", "open notes", "open note")):
             if "note" in user_command or "notes" in user_command or "notepad" in user_command:
-                speak_text("Opening Notes")
+                speak_text("Opening Notes.")
                 opened = open_text_editor(preferred="notes")
             else:
-                speak_text("Opening editor")
+                speak_text("Opening the editor.")
                 opened = open_text_editor()
             if opened:
                 print("Editor opened.")
@@ -326,33 +386,47 @@ if __name__ == "__main__":
 
         # Example response
         if "hello" in user_command:
-            speak_text("Hello Codefather. How can I help you?")
+            speak_text("Hello, Codefather. How can I help you today?")
         elif "who created you" in user_command:
-            speak_text("Codefather is a software developer and the creator of Sage, your personal assistant.")
+            speak_text("You created me, Codefather. I'm Sage, your personal assistant.")
         elif "what time is it" in user_command:
             current_time = time.strftime("%I:%M %p")
-            speak_text(f"The current time is {current_time}.")
+            speak_text(f"It's {current_time} right now.")
         elif "what are you" in user_command:
-            speak_text("I am Sage, an interactive artificial consciousness.")
+            speak_text("I'm Sage, your interactive artificial intelligence assistant.")
         elif "schedule" in user_command:
             schedule()
         elif 'volume up' in user_command or 'increase volume' in user_command:
-            speak_text("Increasing volume.")
+            speak_text("Turning the volume up.")
             try:
                 # On macOS, use AppleScript to increase volume
                 subprocess.run(['osascript', '-e', 'set volume output volume (output volume of (get volume settings) + 10)'])
             except Exception as e:
                 print(f"Failed to increase volume: {e}")
         elif 'volume down' in user_command or 'decrease volume' in user_command:
-            speak_text("Decreasing volume.")
+            speak_text("Turning the volume down.")
             try:
                 # On macOS, use AppleScript to decrease volume
                 subprocess.run(['osascript', '-e', 'set volume output volume (output volume of (get volume settings) - 10)'])
             except Exception as e:
                 print(f"Failed to decrease volume: {e}")
+        elif 'mute' in user_command or 'mute volume' in user_command or 'volume mute' in user_command:
+            speak_text("Muting the volume.")
+            try:
+                # On macOS, use AppleScript to mute volume
+                subprocess.run(['osascript', '-e', 'set volume output muted true'])
+            except Exception as e:
+                print(f"Failed to mute volume: {e}")
+        elif 'unmute' in user_command or 'unmute volume' in user_command or 'volume unmute' in user_command:
+            speak_text("Unmuting the volume.")
+            try:
+                # On macOS, use AppleScript to unmute volume
+                subprocess.run(['osascript', '-e', 'set volume output muted false'])
+            except Exception as e:
+                print(f"Failed to unmute volume: {e}")
 
         else:
-            speak_text("I heard you, but I do not have a command for that yet.")
+            speak_text("I heard you, but I'm not sure what to do with that command yet.")
 
 
 # import datetime
